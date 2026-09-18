@@ -590,8 +590,7 @@ local function createESP(player)
    tracer.Thickness = 1
 
    local skeletonLines = {}
-   -- Total 8 sambungan garis untuk mencakup struktur R6 & R15 dasar
-   for i = 1, 8 do
+   for i = 1, 14 do
       local line = Drawing.new("Line")
       line.Visible = false
       line.Thickness = 1
@@ -797,7 +796,7 @@ RunService.RenderStepped:Connect(function()
                data.Box.Size = Vector2.new(width, height)
                data.Box.Position = boxPos
                data.Box.Color = boxCol
-            data.Box.Visible = true
+               data.Box.Visible = true
             else
                data.Box.Visible = false
             end
@@ -833,7 +832,6 @@ RunService.RenderStepped:Connect(function()
                local isR15 = character:FindFirstChild("UpperTorso") ~= nil
 
                if isR15 then
-                  -- R15 Joints Map
                   joints = {
                      {character:FindFirstChild("Head"), character:FindFirstChild("UpperTorso")},
                      {character:FindFirstChild("UpperTorso"), character:FindFirstChild("LowerTorso")},
@@ -851,7 +849,6 @@ RunService.RenderStepped:Connect(function()
                      {character:FindFirstChild("RightLowerLeg"), character:FindFirstChild("RightFoot")}
                   }
                else
-                  -- R6 Joints Map
                   joints = {
                      {character:FindFirstChild("Head"), character:FindFirstChild("Torso")},
                      {character:FindFirstChild("Torso"), character:FindFirstChild("Left Arm")},
@@ -861,9 +858,9 @@ RunService.RenderStepped:Connect(function()
                   }
                end
 
-               for index, pair in ipairs(joints) do
-                  local line = data.SkeletonLines[index]
-                  if line then
+               for index, line in ipairs(data.SkeletonLines) do
+                  local pair = joints[index]
+                  if pair then
                      local partA, partB = pair[1], pair[2]
                      if partA and partB then
                         local posA, onScreenA = Camera:WorldToViewportPoint(partA.Position)
@@ -880,6 +877,8 @@ RunService.RenderStepped:Connect(function()
                      else
                         line.Visible = false
                      end
+                  else
+                     line.Visible = false
                   end
                end
             else
