@@ -45,12 +45,15 @@ local ESPSettings = {
    Box = false,
    Name = false,
    Health = false,
+   Skeleton = false,
    Chams = false,
    Tracer = false,
    Outline = false,
    TeamColor = false,
    BoxColor = Color3.fromRGB(255, 255, 255),
    BoxRGB = false,
+   SkeletonColor = Color3.fromRGB(255, 255, 255),
+   SkeletonRGB = false,
    ChamsColor = Color3.fromRGB(255, 0, 0),
    ChamsRGB = false,
    ChamsTransparency = 0.5,
@@ -226,6 +229,11 @@ Toggles.ESPEnabled = VisualTab:CreateToggle({
             if data.HealthBg then data.HealthBg.Visible = false end
             if data.Tracer then data.Tracer.Visible = false end
             if data.Highlight then data.Highlight.Enabled = false end
+            if data.SkeletonLines then
+               for _, line in pairs(data.SkeletonLines) do
+                  line.Visible = false
+               end
+            end
          end
       end
    end,
@@ -305,7 +313,34 @@ Toggles.OutlineRGB = VisualTab:CreateToggle({
    end,
 })
 
-VisualTab:CreateSection("Chams & Tracer Utilities")
+VisualTab:CreateSection("Skeleton, Chams & Tracer")
+
+Toggles.Skeleton = VisualTab:CreateToggle({
+   name = "ESP Skeleton (R6 & R15)",
+   currentValue = ESPSettings.Skeleton,
+   callback = function(Value)
+      ESPSettings.Skeleton = Value
+      saveLastState()
+   end,
+})
+
+VisualTab:CreateColorPicker({
+   name = "Skeleton Color",
+   color = ESPSettings.SkeletonColor,
+   callback = function(Value)
+      ESPSettings.SkeletonColor = Value
+      saveLastState()
+   end,
+})
+
+Toggles.SkeletonRGB = VisualTab:CreateToggle({
+   name = "Skeleton Rainbow Mode (RGB)",
+   currentValue = ESPSettings.SkeletonRGB,
+   callback = function(Value)
+      ESPSettings.SkeletonRGB = Value
+      saveLastState()
+   end,
+})
 
 Toggles.Chams = VisualTab:CreateToggle({
    name = "Chams",
@@ -512,6 +547,8 @@ task.defer(function()
    if Toggles.BoxRGB then Toggles.BoxRGB:Set(ESPSettings.BoxRGB) end
    if Toggles.Outline then Toggles.Outline:Set(ESPSettings.Outline) end
    if Toggles.OutlineRGB then Toggles.OutlineRGB:Set(ESPSettings.OutlineRGB) end
+   if Toggles.Skeleton then Toggles.Skeleton:Set(ESPSettings.Skeleton) end
+   if Toggles.SkeletonRGB then Toggles.SkeletonRGB:Set(ESPSettings.SkeletonRGB) end
    if Toggles.Chams then Toggles.Chams:Set(ESPSettings.Chams) end
    if Toggles.ChamsRGB then Toggles.ChamsRGB:Set(ESPSettings.ChamsRGB) end
    if Toggles.Tracer then Toggles.Tracer:Set(ESPSettings.Tracer) end
@@ -552,6 +589,15 @@ local function createESP(player)
    tracer.Visible = false
    tracer.Thickness = 1
 
+   local skeletonLines = {}
+   -- Total 8 sambungan garis untuk mencakup struktur R6 & R15 dasar
+   for i = 1, 8 do
+      local line = Drawing.new("Line")
+      line.Visible = false
+      line.Thickness = 1
+      table.insert(skeletonLines, line)
+   end
+
    local highlight = Instance.new("Highlight")
    highlight.FillTransparency = 0.5
    highlight.OutlineTransparency = 0
@@ -562,6 +608,7 @@ local function createESP(player)
       HealthBg = healthBg,
       HealthBar = healthBar,
       Tracer = tracer,
+      SkeletonLines = skeletonLines,
       Highlight = highlight
    }
 end
@@ -574,6 +621,11 @@ local function removeESP(player)
       if espCache[player].HealthBar then espCache[player].HealthBar:Remove() end
       if espCache[player].Tracer then espCache[player].Tracer:Remove() end
       if espCache[player].Highlight then espCache[player].Highlight:Destroy() end
+      if espCache[player].SkeletonLines then
+         for _, line in pairs(espCache[player].SkeletonLines) do
+            line:Remove()
+         end
+      end
       espCache[player] = nil
    end
 end
@@ -736,6 +788,7 @@ RunService.RenderStepped:Connect(function()
             local boxPos = Vector2.new(headScreen.X - width / 2, headScreen.Y)
 
             local boxCol = ESPSettings.BoxRGB and getRainbowColor(0.3) or (ESPSettings.TeamColor and player.Team and player.TeamColor.Color or ESPSettings.BoxColor)
+            local skeletonCol = ESPSettings.SkeletonRGB and getRainbowColor(0.3) or (ESPSettings.TeamColor and player.Team and player.TeamColor.Color or ESPSettings.SkeletonColor)
             local chamsCol = ESPSettings.ChamsRGB and getRainbowColor(0.3) or (ESPSettings.TeamColor and player.Team and player.TeamColor.Color or ESPSettings.ChamsColor)
             local outlineCol = ESPSettings.OutlineRGB and getRainbowColor(0.3) or (ESPSettings.TeamColor and player.Team and player.TeamColor.Color or ESPSettings.OutlineColor)
             local tracerCol = ESPSettings.TracerRGB and getRainbowColor(0.3) or (ESPSettings.TeamColor and player.Team and player.TeamColor.Color or ESPSettings.TracerColor)
@@ -744,7 +797,7 @@ RunService.RenderStepped:Connect(function()
                data.Box.Size = Vector2.new(width, height)
                data.Box.Position = boxPos
                data.Box.Color = boxCol
-               data.Box.Visible = true
+            data.Box.Visible = true
             else
                data.Box.Visible = false
             end
@@ -772,6 +825,67 @@ RunService.RenderStepped:Connect(function()
             else
                data.HealthBg.Visible = false
                data.HealthBar.Visible = false
+            end
+
+            -- ================= R6 & R15 SKELETON LOGIC =================
+            if ESPSettings.Skeleton then
+               local joints = {}
+               local isR15 = character:FindFirstChild("UpperTorso") ~= nil
+
+               if isR15 then
+                  -- R15 Joints Map
+                  joints = {
+                     {character:FindFirstChild("Head"), character:FindFirstChild("UpperTorso")},
+                     {character:FindFirstChild("UpperTorso"), character:FindFirstChild("LowerTorso")},
+                     {character:FindFirstChild("UpperTorso"), character:FindFirstChild("LeftUpperArm")},
+                     {character:FindFirstChild("LeftUpperArm"), character:FindFirstChild("LeftLowerArm")},
+                     {character:FindFirstChild("LeftLowerArm"), character:FindFirstChild("LeftHand")},
+                     {character:FindFirstChild("UpperTorso"), character:FindFirstChild("RightUpperArm")},
+                     {character:FindFirstChild("RightUpperArm"), character:FindFirstChild("RightLowerArm")},
+                     {character:FindFirstChild("RightLowerArm"), character:FindFirstChild("RightHand")},
+                     {character:FindFirstChild("LowerTorso"), character:FindFirstChild("LeftUpperLeg")},
+                     {character:FindFirstChild("LeftUpperLeg"), character:FindFirstChild("LeftLowerLeg")},
+                     {character:FindFirstChild("LeftLowerLeg"), character:FindFirstChild("LeftFoot")},
+                     {character:FindFirstChild("LowerTorso"), character:FindFirstChild("RightUpperLeg")},
+                     {character:FindFirstChild("RightUpperLeg"), character:FindFirstChild("RightLowerLeg")},
+                     {character:FindFirstChild("RightLowerLeg"), character:FindFirstChild("RightFoot")}
+                  }
+               else
+                  -- R6 Joints Map
+                  joints = {
+                     {character:FindFirstChild("Head"), character:FindFirstChild("Torso")},
+                     {character:FindFirstChild("Torso"), character:FindFirstChild("Left Arm")},
+                     {character:FindFirstChild("Torso"), character:FindFirstChild("Right Arm")},
+                     {character:FindFirstChild("Torso"), character:FindFirstChild("Left Leg")},
+                     {character:FindFirstChild("Torso"), character:FindFirstChild("Right Leg")}
+                  }
+               end
+
+               for index, pair in ipairs(joints) do
+                  local line = data.SkeletonLines[index]
+                  if line then
+                     local partA, partB = pair[1], pair[2]
+                     if partA and partB then
+                        local posA, onScreenA = Camera:WorldToViewportPoint(partA.Position)
+                        local posB, onScreenB = Camera:WorldToViewportPoint(partB.Position)
+
+                        if onScreenA or onScreenB then
+                           line.From = Vector2.new(posA.X, posA.Y)
+                           line.To = Vector2.new(posB.X, posB.Y)
+                           line.Color = skeletonCol
+                           line.Visible = true
+                        else
+                           line.Visible = false
+                        end
+                     else
+                        line.Visible = false
+                     end
+                  end
+               end
+            else
+               for _, line in pairs(data.SkeletonLines) do
+                  line.Visible = false
+               end
             end
 
             if ESPSettings.Tracer then
@@ -811,6 +925,7 @@ RunService.RenderStepped:Connect(function()
             data.HealthBar.Visible = false
             data.Tracer.Visible = false
             data.Highlight.Enabled = false
+            for _, line in pairs(data.SkeletonLines) do line.Visible = false end
          end
       else
          data.Box.Visible = false
@@ -819,6 +934,9 @@ RunService.RenderStepped:Connect(function()
          data.HealthBar.Visible = false
          data.Tracer.Visible = false
          data.Highlight.Enabled = false
+         if data.SkeletonLines then
+            for _, line in pairs(data.SkeletonLines) do line.Visible = false end
+         end
       end
    end
 end)
