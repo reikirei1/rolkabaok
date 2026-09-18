@@ -1,3 +1,4 @@
+-- Memuat pustaka Rayfield Gen2
 local Rayfield = loadstring(game:HttpGet("https://sirius.menu/gen2"))()
 
 local window = Rayfield:CreateWindow({
@@ -774,7 +775,18 @@ RunService.RenderStepped:Connect(function()
             end
 
             if ESPSettings.Tracer then
-               data.Tracer.From = Vector2.new(Camera.ViewportSize.X / 2, Camera.ViewportSize.Y)
+               local originPos
+               if ESPSettings.TracerOrigin == "Bawah Layar" then
+                  originPos = Vector2.new(Camera.ViewportSize.X / 2, Camera.ViewportSize.Y)
+               elseif ESPSettings.TracerOrigin == "Tengah Layar" then
+                  originPos = Vector2.new(Camera.ViewportSize.X / 2, Camera.ViewportSize.Y / 2)
+               elseif ESPSettings.TracerOrigin == "Atas Layar" then
+                  originPos = Vector2.new(Camera.ViewportSize.X / 2, 0)
+               else
+                  originPos = Vector2.new(Camera.ViewportSize.X / 2, Camera.ViewportSize.Y)
+               end
+
+               data.Tracer.From = originPos
                data.Tracer.To = Vector2.new(legScreen.X, legScreen.Y)
                data.Tracer.Color = tracerCol
                data.Tracer.Visible = true
