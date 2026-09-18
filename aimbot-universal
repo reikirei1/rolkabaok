@@ -1,0 +1,743 @@
+local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
+
+local Window = Rayfield:CreateWindow({
+   Name = "Aimbot & ESP Utility",
+   LoadingTitle = "Initializing Utilities...",
+   LoadingSubtitle = "by rekik ganas",
+   ConfigurationSaving = {
+      Enabled = false,
+   },
+   KeySystem = false,
+})
+
+-- Variabel Layanan & State Global
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
+local HttpService = game:GetService("HttpService")
+local Workspace = game:GetService("Workspace")
+
+local LocalPlayer = Players.LocalPlayer
+local Camera = Workspace.CurrentCamera
+
+local AimbotSettings = {
+   Enabled = false,
+   SelectedKeyName = "MouseButton2",
+   FOV = 100,
+   Smoothness = 5,
+   StickyAim = false,
+   WallCheck = true,
+   TeamCheck = true,
+   TargetPart = "Head",
+   -- Pengaturan Visual FOV Circle Baru
+   FOVTransparency = 0.7,
+   FOVThickness = 1,
+   FOVFilled = false,
+   -- FOV Changer Kamera
+   FOVChangerEnabled = false,
+   CameraFOV = 70
+}
+
+local ESPSettings = {
+   Enabled = false,
+   Box = false,
+   Name = false,
+   Health = false,
+   Chams = false,
+   Tracer = false,
+   Outline = false,
+   TeamColor = false,
+   
+   -- Warna & RGB Toggles
+   BoxColor = Color3.fromRGB(255, 255, 255),
+   BoxRGB = false,
+   
+   ChamsColor = Color3.fromRGB(255, 0, 0),
+   ChamsRGB = false,
+   ChamsTransparency = 0.5,
+   
+   TracerColor = Color3.fromRGB(255, 255, 255),
+   TracerRGB = false,
+   TracerOrigin = "Bawah Layar",
+   
+   OutlineColor = Color3.fromRGB(255, 255, 255),
+   OutlineRGB = false
+}
+
+-- File Penyimpanan Otomatis (Autosave / Last State)
+local AutoStateFile = "LuauScripting_LastState.json"
+
+local function saveLastState()
+   if writefile then
+      local serializedESP = {}
+      for k, v in pairs(ESPSettings) do
+         if typeof(v) == "Color3" then
+            serializedESP[k] = {r = v.R, g = v.G, b = v.B}
+         else
+            serializedESP[k] = v
+         end
+      end
+
+      local data = {Aimbot = AimbotSettings, ESP = serializedESP}
+      local success, encoded = pcall(function()
+         return HttpService:JSONEncode(data)
+      end)
+      if success then
+         writefile(AutoStateFile, encoded)
+      end
+   end
+end
+
+local function loadLastState()
+   if readfile and isfile and isfile(AutoStateFile) then
+      local success, decoded = pcall(function()
+         return HttpService:JSONDecode(readfile(AutoStateFile))
+      end)
+      if success and type(decoded) == "table" then
+         if decoded.Aimbot then
+            for k, v in pairs(decoded.Aimbot) do AimbotSettings[k] = v end
+         end
+         if decoded.ESP then
+            for k, v in pairs(decoded.ESP) do
+               if type(v) == "table" and v.r and v.g and v.b then
+                  ESPSettings[k] = Color3.new(v.r, v.g, v.b)
+               else
+                  ESPSettings[k] = v
+               end
+            end
+         end
+      end
+   end
+end
+
+loadLastState()
+
+-- Penyimpanan Data Visual ESP per Player
+local espCache = {}
+
+local function getRainbowColor(speed)
+   local hue = (tick() * (speed or 0.3)) % 1
+   return Color3.fromHSV(hue, 1, 1)
+end
+
+-- ================= TAB AIMBOT =================
+local MainTab = Window:CreateTab("Aimbot", 4483362458)
+
+MainTab:CreateToggle({
+   Name = "Enable Aimbot",
+   CurrentValue = AimbotSettings.Enabled,
+   Callback = function(Value)
+      AimbotSettings.Enabled = Value
+      saveLastState()
+   end,
+})
+
+MainTab:CreateDropdown({
+   Name = "Hold Keybind",
+   Options = {"MouseButton2", "LeftShift", "LeftAlt", "E", "Q", "C"},
+   CurrentOption = AimbotSettings.SelectedKeyName,
+   Callback = function(Option)
+      local chosen = type(Option) == "table" and Option[1] or tostring(Option)
+      AimbotSettings.SelectedKeyName = chosen
+      saveLastState()
+   end,
+})
+
+MainTab:CreateDropdown({
+   Name = "Target Part",
+   Options = {"Head", "HumanoidRootPart", "UpperTorso"},
+   CurrentOption = AimbotSettings.TargetPart,
+   Callback = function(Option)
+      local chosen = type(Option) == "table" and Option[1] or tostring(Option)
+      AimbotSettings.TargetPart = chosen
+      saveLastState()
+   end,
+})
+
+MainTab:CreateToggle({
+   Name = "Team Check",
+   CurrentValue = AimbotSettings.TeamCheck,
+   Callback = function(Value)
+      AimbotSettings.TeamCheck = Value
+      saveLastState()
+   end,
+})
+
+MainTab:CreateToggle({
+   Name = "Wall Check (Raycast)",
+   CurrentValue = AimbotSettings.WallCheck,
+   Callback = function(Value)
+      AimbotSettings.WallCheck = Value
+      saveLastState()
+   end,
+})
+
+MainTab:CreateToggle({
+   Name = "Sticky Aim (Instant Snap)",
+   CurrentValue = AimbotSettings.StickyAim,
+   Callback = function(Value)
+      AimbotSettings.StickyAim = Value
+      saveLastState()
+   end,
+})
+
+MainTab:CreateSlider({
+   Name = "FOV Radius",
+   Range = {20, 500},
+   Increment = 5,
+   CurrentValue = AimbotSettings.FOV,
+   Callback = function(Value)
+      AimbotSettings.FOV = Value
+      saveLastState()
+   end,
+})
+
+MainTab:CreateSlider({
+   Name = "Smoothness (Higher = Slower)",
+   Range = {1, 20},
+   Increment = 1,
+   CurrentValue = AimbotSettings.Smoothness,
+   Callback = function(Value)
+      AimbotSettings.Smoothness = Value
+      saveLastState()
+   end,
+})
+
+-- Pengaturan Style FOV Circle
+MainTab:CreateSlider({
+   Name = "FOV Transparency",
+   Range = {0.1, 1},
+   Increment = 0.05,
+   CurrentValue = AimbotSettings.FOVTransparency,
+   Callback = function(Value)
+      AimbotSettings.FOVTransparency = Value
+      saveLastState()
+   end,
+})
+
+MainTab:CreateSlider({
+   Name = "FOV Thickness",
+   Range = {1, 5},
+   Increment = 1,
+   CurrentValue = AimbotSettings.FOVThickness,
+   Callback = function(Value)
+      AimbotSettings.FOVThickness = Value
+      saveLastState()
+   end,
+})
+
+MainTab:CreateToggle({
+   Name = "FOV Filled (Isi Warna Transparan)",
+   CurrentValue = AimbotSettings.FOVFilled,
+   Callback = function(Value)
+      AimbotSettings.FOVFilled = Value
+      saveLastState()
+   end,
+})
+
+-- Pengaturan FOV Changer Kamera (Diperbarui dengan Reset ke Default saat Off)
+MainTab:CreateToggle({
+   Name = "Enable FOV Changer (Kamera)",
+   CurrentValue = AimbotSettings.FOVChangerEnabled,
+   Callback = function(Value)
+      AimbotSettings.FOVChangerEnabled = Value
+      saveLastState()
+      if not Value then
+         Camera.FieldOfView = 70 -- Mengembalikan ke default Roblox saat dimatikan
+      end
+   end,
+})
+
+MainTab:CreateSlider({
+   Name = "Camera FOV Value",
+   Range = {40, 120},
+   Increment = 1,
+   CurrentValue = AimbotSettings.CameraFOV,
+   Callback = function(Value)
+      AimbotSettings.CameraFOV = Value
+      saveLastState()
+   end,
+})
+
+-- ================= TAB ESP =================
+local ESPTab = Window:CreateTab("ESP", 4483362458)
+
+ESPTab:CreateToggle({
+   Name = "Enable ESP",
+   CurrentValue = ESPSettings.Enabled,
+   Callback = function(Value)
+      ESPSettings.Enabled = Value
+      saveLastState()
+      if not Value then
+         for _, data in pairs(espCache) do
+            if data.Box then data.Box.Visible = false end
+            if data.Name then data.Name.Visible = false end
+            if data.HealthBar then data.HealthBar.Visible = false end
+            if data.HealthBg then data.HealthBg.Visible = false end
+            if data.Tracer then data.Tracer.Visible = false end
+            if data.Highlight then data.Highlight.Enabled = false end
+         end
+      end
+   end,
+})
+
+ESPTab:CreateToggle({
+   Name = "Warna Sesuai Tim (Team Color)",
+   CurrentValue = ESPSettings.TeamColor,
+   Callback = function(Value)
+      ESPSettings.TeamColor = Value
+      saveLastState()
+   end,
+})
+
+-- Bagian Box
+ESPTab:CreateToggle({
+   Name = "ESP Box",
+   CurrentValue = ESPSettings.Box,
+   Callback = function(Value)
+      ESPSettings.Box = Value
+      saveLastState()
+   end,
+})
+
+ESPTab:CreateColorPicker({
+   Name = "ESP Box Color",
+   Color = ESPSettings.BoxColor,
+   Callback = function(Value)
+      ESPSettings.BoxColor = Value
+      saveLastState()
+   end,
+})
+
+ESPTab:CreateToggle({
+   Name = "Box Rainbow Mode (RGB)",
+   CurrentValue = ESPSettings.BoxRGB,
+   Callback = function(Value)
+      ESPSettings.BoxRGB = Value
+      saveLastState()
+   end,
+})
+
+-- Bagian Outline Avatar
+ESPTab:CreateToggle({
+   Name = "ESP Outline Avatar",
+   CurrentValue = ESPSettings.Outline,
+   Callback = function(Value)
+      ESPSettings.Outline = Value
+      saveLastState()
+   end,
+})
+
+ESPTab:CreateColorPicker({
+   Name = "Outline Color",
+   Color = ESPSettings.OutlineColor,
+   Callback = function(Value)
+      ESPSettings.OutlineColor = Value
+      saveLastState()
+   end,
+})
+
+ESPTab:CreateToggle({
+   Name = "Outline Rainbow Mode (RGB)",
+   CurrentValue = ESPSettings.OutlineRGB,
+   Callback = function(Value)
+      ESPSettings.OutlineRGB = Value
+      saveLastState()
+   end,
+})
+
+-- Bagian Chams
+ESPTab:CreateToggle({
+   Name = "Chams",
+   CurrentValue = ESPSettings.Chams,
+   Callback = function(Value)
+      ESPSettings.Chams = Value
+      saveLastState()
+   end,
+})
+
+ESPTab:CreateColorPicker({
+   Name = "Chams Color",
+   Color = ESPSettings.ChamsColor,
+   Callback = function(Value)
+      ESPSettings.ChamsColor = Value
+      saveLastState()
+   end,
+})
+
+ESPTab:CreateToggle({
+   Name = "Chams Rainbow Mode (RGB)",
+   CurrentValue = ESPSettings.ChamsRGB,
+   Callback = function(Value)
+      ESPSettings.ChamsRGB = Value
+      saveLastState()
+   end,
+})
+
+ESPTab:CreateSlider({
+   Name = "Chams Transparency",
+   Range = {0, 1},
+   Increment = 0.05,
+   CurrentValue = ESPSettings.ChamsTransparency,
+   Callback = function(Value)
+      ESPSettings.ChamsTransparency = Value
+      saveLastState()
+   end,
+})
+
+-- Bagian Tracer
+ESPTab:CreateToggle({
+   Name = "Tracer",
+   CurrentValue = ESPSettings.Tracer,
+   Callback = function(Value)
+      ESPSettings.Tracer = Value
+      saveLastState()
+   end,
+})
+
+ESPTab:CreateDropdown({
+   Name = "Lokasi Tracer",
+   Options = {"Bawah Layar", "Tengah Layar", "Atas Layar"},
+   CurrentOption = ESPSettings.TracerOrigin,
+   Callback = function(Option)
+      local chosen = type(Option) == "table" and Option[1] or tostring(Option)
+      ESPSettings.TracerOrigin = chosen
+      saveLastState()
+   end,
+})
+
+ESPTab:CreateColorPicker({
+   Name = "Tracer Color",
+   Color = ESPSettings.TracerColor,
+   Callback = function(Value)
+      ESPSettings.TracerColor = Value
+      saveLastState()
+   end,
+})
+
+ESPTab:CreateToggle({
+   Name = "Tracer Rainbow Mode (RGB)",
+   CurrentValue = ESPSettings.TracerRGB,
+   Callback = function(Value)
+      ESPSettings.TracerRGB = Value
+      saveLastState()
+   end,
+})
+
+-- Bagian Informasi Tambahan (Name & Health)
+ESPTab:CreateToggle({
+   Name = "ESP Name",
+   CurrentValue = ESPSettings.Name,
+   Callback = function(Value)
+      ESPSettings.Name = Value
+      saveLastState()
+   end,
+})
+
+ESPTab:CreateToggle({
+   Name = "ESP Health",
+   CurrentValue = ESPSettings.Health,
+   Callback = function(Value)
+      ESPSettings.Health = Value
+      saveLastState()
+   end,
+})
+
+-- ================= LOGIKA ESP & AIMBOT =================
+
+local function createESP(player)
+   if espCache[player] then return end
+   
+   local box = Drawing.new("Square")
+   box.Visible = false
+   box.Thickness = 1
+   box.Filled = false
+
+   local name = Drawing.new("Text")
+   name.Visible = false
+   name.Size = 14
+   name.Center = true
+   name.Outline = true
+   name.Color = Color3.fromRGB(255, 255, 255)
+
+   local healthBg = Drawing.new("Square")
+   healthBg.Visible = false
+   healthBg.Filled = true
+   healthBg.Color = Color3.fromRGB(0, 0, 0)
+
+   local healthBar = Drawing.new("Square")
+   healthBar.Visible = false
+   healthBar.Filled = true
+
+   local tracer = Drawing.new("Line")
+   tracer.Visible = false
+   tracer.Thickness = 1
+
+   local highlight = Instance.new("Highlight")
+   highlight.FillTransparency = 0.5
+   highlight.OutlineTransparency = 0
+
+   espCache[player] = {
+      Box = box,
+      Name = name,
+      HealthBg = healthBg,
+      HealthBar = healthBar,
+      Tracer = tracer,
+      Highlight = highlight
+   }
+end
+
+local function removeESP(player)
+   if espCache[player] then
+      if espCache[player].Box then espCache[player].Box:Remove() end
+      if espCache[player].Name then espCache[player].Name:Remove() end
+      if espCache[player].HealthBg then espCache[player].HealthBg:Remove() end
+      if espCache[player].HealthBar then espCache[player].HealthBar:Remove() end
+      if espCache[player].Tracer then espCache[player].Tracer:Remove() end
+      if espCache[player].Highlight then espCache[player].Highlight:Destroy() end
+      espCache[player] = nil
+   end
+end
+
+Players.PlayerAdded:Connect(createESP)
+Players.PlayerRemoving:Connect(removeESP)
+for _, p in pairs(Players:GetPlayers()) do
+   if p ~= LocalPlayer then createESP(p) end
+end
+
+-- Lingkaran FOV untuk Aimbot
+local FOVCircle = Drawing.new("Circle")
+FOVCircle.Visible = false
+FOVCircle.Filled = false
+
+local function isVisible(targetPart)
+   if not AimbotSettings.WallCheck then return true end
+   local origin = Camera.CFrame.Position
+   local direction = (targetPart.Position - origin).Unit * (targetPart.Position - origin).Magnitude
+   local raycastParams = RaycastParams.new()
+   raycastParams.FilterType = Enum.RaycastFilterType.Exclude
+   raycastParams.FilterDescendantsInstances = {LocalPlayer.Character, Camera}
+   local result = Workspace:Raycast(origin, direction, raycastParams)
+   if result then
+      local hitCharacter = result.Instance:FindFirstAncestorOfClass("Model")
+      if hitCharacter and hitCharacter == targetPart.Parent then return true end
+      return false
+   end
+   return true
+end
+
+local function getClosestPlayerInFOV()
+   local closestPlayer = nil
+   local shortestDistance = AimbotSettings.FOV
+   for _, player in pairs(Players:GetPlayers()) do
+      if player ~= LocalPlayer then
+         local passTeam = true
+         if AimbotSettings.TeamCheck and player.Team == LocalPlayer.Team then passTeam = false end
+         if passTeam and player.Character and player.Character:FindFirstChild("Humanoid") and player.Character.Humanoid.Health > 0 then
+            local targetPart = player.Character:FindFirstChild(AimbotSettings.TargetPart)
+            if targetPart then
+               local screenPoint, onScreen = Camera:WorldToViewportPoint(targetPart.Position)
+               if onScreen then
+                  local mouseLocation = UserInputService:GetMouseLocation()
+                  local distanceToMouse = (Vector2.new(screenPoint.X, screenPoint.Y) - mouseLocation).Magnitude
+                  if distanceToMouse < shortestDistance and isVisible(targetPart) then
+                     closestPlayer = player
+                     shortestDistance = distanceToMouse
+                  end
+               end
+            end
+         end
+      end
+   end
+   return closestPlayer
+end
+
+local function isAnyTargetInFOV()
+   for _, player in pairs(Players:GetPlayers()) do
+      if player ~= LocalPlayer then
+         local passTeam = true
+         if AimbotSettings.TeamCheck and player.Team == LocalPlayer.Team then passTeam = false end
+         if passTeam and player.Character and player.Character:FindFirstChild("Humanoid") and player.Character.Humanoid.Health > 0 then
+            local targetPart = player.Character:FindFirstChild(AimbotSettings.TargetPart)
+            if targetPart then
+               local screenPoint, onScreen = Camera:WorldToViewportPoint(targetPart.Position)
+               if onScreen then
+                  local mouseLocation = UserInputService:GetMouseLocation()
+                  local distanceToMouse = (Vector2.new(screenPoint.X, screenPoint.Y) - mouseLocation).Magnitude
+                  if distanceToMouse < AimbotSettings.FOV and isVisible(targetPart) then
+                     return true
+                  end
+               end
+            end
+         end
+      end
+   end
+   return false
+end
+
+-- Loop Utama Render (Aimbot, FOV, FOV Changer & ESP)
+RunService.RenderStepped:Connect(function()
+   local mouseLoc = UserInputService:GetMouseLocation()
+   
+   -- Pengaturan Visual FOV Circle & Dynamic Color
+   FOVCircle.Position = mouseLoc
+   FOVCircle.Radius = AimbotSettings.FOV
+   FOVCircle.Transparency = AimbotSettings.FOVTransparency
+   FOVCircle.Thickness = AimbotSettings.FOVThickness
+   FOVCircle.Filled = AimbotSettings.FOVFilled
+   FOVCircle.Visible = AimbotSettings.Enabled
+
+   if isAnyTargetInFOV() then
+      FOVCircle.Color = Color3.fromRGB(0, 255, 0)
+   else
+      FOVCircle.Color = Color3.fromRGB(255, 255, 255)
+   end
+
+   -- FOV Changer Kamera (Aktif jika Toggle On)
+   if AimbotSettings.FOVChangerEnabled then
+      Camera.FieldOfView = AimbotSettings.CameraFOV
+   end
+
+   -- --- Eksekusi Aimbot ---
+   local isHolding = false
+   local keyName = AimbotSettings.SelectedKeyName
+   if keyName == "MouseButton2" then
+      isHolding = UserInputService:IsMouseButtonPressed(Enum.UserInputType.MouseButton2)
+   elseif keyName == "LeftShift" then
+      isHolding = UserInputService:IsKeyDown(Enum.KeyCode.LeftShift)
+   elseif keyName == "LeftAlt" then
+      isHolding = UserInputService:IsKeyDown(Enum.KeyCode.LeftAlt)
+   elseif keyName == "E" then
+      isHolding = UserInputService:IsKeyDown(Enum.KeyCode.E)
+   elseif keyName == "Q" then
+      isHolding = UserInputService:IsKeyDown(Enum.KeyCode.Q)
+   elseif keyName == "C" then
+      isHolding = UserInputService:IsKeyDown(Enum.KeyCode.C)
+   end
+
+   if AimbotSettings.Enabled and isHolding then
+      local target = getClosestPlayerInFOV()
+      if target and target.Character and target.Character:FindFirstChild(AimbotSettings.TargetPart) then
+         local targetPart = target.Character[AimbotSettings.TargetPart]
+         local targetCFrame = CFrame.new(Camera.CFrame.Position, targetPart.Position)
+         if AimbotSettings.StickyAim then
+            Camera.CFrame = targetCFrame
+         else
+            Camera.CFrame = Camera.CFrame:Lerp(targetCFrame, 1 / math.max(AimbotSettings.Smoothness, 1))
+         end
+      end
+   end
+
+   -- --- Eksekusi ESP ---
+   for player, data in pairs(espCache) do
+      local character = player.Character
+      local humanoid = character and character:FindFirstChild("Humanoid")
+      local rootPart = character and character:FindFirstChild("HumanoidRootPart")
+
+      if ESPSettings.Enabled and character and humanoid and rootPart and humanoid.Health > 0 then
+         local vector, onScreen = Camera:WorldToViewportPoint(rootPart.Position)
+
+         if onScreen then
+            local head = character:FindFirstChild("Head")
+            local headPosition = head and head.Position or (rootPart.Position + Vector3.new(0, 2, 0))
+            local legPosition = rootPart.Position - Vector3.new(0, 3, 0)
+            
+            local headScreen = Camera:WorldToViewportPoint(headPosition + Vector3.new(0, 0.5, 0))
+            local legScreen = Camera:WorldToViewportPoint(legPosition)
+
+            local height = math.abs(headScreen.Y - legScreen.Y)
+            local width = height / 2
+            local boxPos = Vector2.new(headScreen.X - width / 2, headScreen.Y)
+
+            local boxCol = ESPSettings.BoxRGB and getRainbowColor(0.3) or (ESPSettings.TeamColor and player.Team and player.TeamColor.Color or ESPSettings.BoxColor)
+            local chamsCol = ESPSettings.ChamsRGB and getRainbowColor(0.3) or (ESPSettings.TeamColor and player.Team and player.TeamColor.Color or ESPSettings.ChamsColor)
+            local outlineCol = ESPSettings.OutlineRGB and getRainbowColor(0.3) or (ESPSettings.TeamColor and player.Team and player.TeamColor.Color or ESPSettings.OutlineColor)
+            local tracerCol = ESPSettings.TracerRGB and getRainbowColor(0.3) or (ESPSettings.TeamColor and player.Team and player.TeamColor.Color or ESPSettings.TracerColor)
+
+            -- 1. ESP Box
+            if ESPSettings.Box then
+               data.Box.Size = Vector2.new(width, height)
+               data.Box.Position = boxPos
+               data.Box.Color = boxCol
+               data.Box.Visible = true
+            else
+               data.Box.Visible = false
+            end
+
+            -- 2. ESP Name
+            if ESPSettings.Name then
+               data.Name.Text = player.Name
+               data.Name.Position = Vector2.new(headScreen.X, headScreen.Y - 18)
+               data.Name.Visible = true
+            else
+               data.Name.Visible = false
+            end
+
+            -- 3. ESP Health
+            if ESPSettings.Health then
+               local healthPercent = math.clamp(humanoid.Health / humanoid.MaxHealth, 0, 1)
+               local barHeight = height * healthPercent
+               
+               data.HealthBg.Size = Vector2.new(3, height + 2)
+               data.HealthBg.Position = Vector2.new(boxPos.X - 6, boxPos.Y - 1)
+               data.HealthBg.Visible = true
+
+               data.HealthBar.Size = Vector2.new(1, barHeight)
+               data.HealthBar.Position = Vector2.new(boxPos.X - 5, boxPos.Y + (height - barHeight))
+               data.HealthBar.Color = Color3.fromRGB(255 - (healthPercent * 255), healthPercent * 255, 0)
+               data.HealthBar.Visible = true
+            else
+               data.HealthBg.Visible = false
+               data.HealthBar.Visible = false
+            end
+
+            -- 4. Tracer
+            if ESPSettings.Tracer then
+               local originPos
+               if ESPSettings.TracerOrigin == "Bawah Layar" then
+                  originPos = Vector2.new(Camera.ViewportSize.X / 2, Camera.ViewportSize.Y)
+               elseif ESPSettings.TracerOrigin == "Tengah Layar" then
+                  originPos = Vector2.new(Camera.ViewportSize.X / 2, Camera.ViewportSize.Y / 2)
+               elseif ESPSettings.TracerOrigin == "Atas Layar" then
+                  originPos = Vector2.new(Camera.ViewportSize.X / 2, 0)
+               else
+                  originPos = Vector2.new(Camera.ViewportSize.X / 2, Camera.ViewportSize.Y)
+               end
+
+               data.Tracer.From = originPos
+               data.Tracer.To = Vector2.new(legScreen.X, legScreen.Y)
+               data.Tracer.Color = tracerCol
+               data.Tracer.Visible = true
+            else
+               data.Tracer.Visible = false
+            end
+
+            -- 5. Outline & Chams Avatar
+            if ESPSettings.Outline or ESPSettings.Chams then
+               data.Highlight.Parent = character
+               data.Highlight.Enabled = true
+               data.Highlight.FillColor = chamsCol
+               data.Highlight.FillTransparency = ESPSettings.Chams and ESPSettings.ChamsTransparency or 1
+               data.Highlight.OutlineColor = outlineCol
+               data.Highlight.OutlineTransparency = ESPSettings.Outline and 0 or 1
+            else
+               data.Highlight.Enabled = false
+            end
+         else
+            data.Box.Visible = false
+            data.Name.Visible = false
+            data.HealthBg.Visible = false
+            data.HealthBar.Visible = false
+            data.Tracer.Visible = false
+            data.Highlight.Enabled = false
+         end
+      else
+         data.Box.Visible = false
+         data.Name.Visible = false
+         data.HealthBg.Visible = false
+         data.HealthBar.Visible = false
+         data.Tracer.Visible = false
+         data.Highlight.Enabled = false
+      end
+   end
+end)
