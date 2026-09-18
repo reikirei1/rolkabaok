@@ -1,3 +1,4 @@
+-- Memuat pustaka Rayfield UI
 local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
 
 local Window = Rayfield:CreateWindow({
@@ -40,6 +41,7 @@ local AimbotSettings = {
 
 local ESPSettings = {
    Enabled = false,
+   EnemyOnly = true,
    Box = false,
    Name = false,
    Health = false,
@@ -235,7 +237,7 @@ MainTab:CreateToggle({
    end,
 })
 
--- Pengaturan FOV Changer Kamera (Diperbarui dengan Reset ke Default saat Off)
+-- Pengaturan FOV Changer Kamera
 MainTab:CreateToggle({
    Name = "Enable FOV Changer (Kamera)",
    CurrentValue = AimbotSettings.FOVChangerEnabled,
@@ -243,7 +245,7 @@ MainTab:CreateToggle({
       AimbotSettings.FOVChangerEnabled = Value
       saveLastState()
       if not Value then
-         Camera.FieldOfView = 70 -- Mengembalikan ke default Roblox saat dimatikan
+         Camera.FieldOfView = 70
       end
    end,
 })
@@ -278,6 +280,15 @@ ESPTab:CreateToggle({
             if data.Highlight then data.Highlight.Enabled = false end
          end
       end
+   end,
+})
+
+ESPTab:CreateToggle({
+   Name = "ESP Enemy Only (Musuh Saja)",
+   CurrentValue = ESPSettings.EnemyOnly,
+   Callback = function(Value)
+      ESPSettings.EnemyOnly = Value
+      saveLastState()
    end,
 })
 
@@ -593,7 +604,7 @@ RunService.RenderStepped:Connect(function()
       FOVCircle.Color = Color3.fromRGB(255, 255, 255)
    end
 
-   -- FOV Changer Kamera (Aktif jika Toggle On)
+   -- FOV Changer Kamera
    if AimbotSettings.FOVChangerEnabled then
       Camera.FieldOfView = AimbotSettings.CameraFOV
    end
@@ -634,19 +645,23 @@ RunService.RenderStepped:Connect(function()
       local humanoid = character and character:FindFirstChild("Humanoid")
       local rootPart = character and character:FindFirstChild("HumanoidRootPart")
 
-      if ESPSettings.Enabled and character and humanoid and rootPart and humanoid.Health > 0 then
-         local vector, onScreen = Camera:WorldToViewportPoint(rootPart.Position)
+      local shouldRender = true
+      if ESPSettings.Enabled and ESPSettings.EnemyOnly and player.Team and LocalPlayer.Team and player.Team == LocalPlayer.Team then
+         shouldRender = false
+      end
 
-         if onScreen then
-            local head = character:FindFirstChild("Head")
-            local headPosition = head and head.Position or (rootPart.Position + Vector3.new(0, 2, 0))
-            local legPosition = rootPart.Position - Vector3.new(0, 3, 0)
-            
-            local headScreen = Camera:WorldToViewportPoint(headPosition + Vector3.new(0, 0.5, 0))
-            local legScreen = Camera:WorldToViewportPoint(legPosition)
+      if ESPSettings.Enabled and shouldRender and character and humanoid and rootPart and humanoid.Health > 0 then
+         -- Penentuan Posisi 3D Atas (Kepala) dan Bawah (Kaki) Presisi Terhadap Kamera Saat Ini (Termasuk Zoom/Scope)
+         local head = character:FindFirstChild("Head")
+         local headWorldPos = head and (head.Position + Vector3.new(0, 0.5, 0)) or (rootPart.Position + Vector3.new(0, 3, 0))
+         local legWorldPos = rootPart.Position - Vector3.new(0, 3, 0)
 
+         local headScreen, headOnScreen = Camera:WorldToViewportPoint(headWorldPos)
+         local legScreen, legOnScreen = Camera:WorldToViewportPoint(legWorldPos)
+
+         if headOnScreen or legOnScreen then
             local height = math.abs(headScreen.Y - legScreen.Y)
-            local width = height / 2
+            local width = height / 2.1
             local boxPos = Vector2.new(headScreen.X - width / 2, headScreen.Y)
 
             local boxCol = ESPSettings.BoxRGB and getRainbowColor(0.3) or (ESPSettings.TeamColor and player.Team and player.TeamColor.Color or ESPSettings.BoxColor)
@@ -664,26 +679,26 @@ RunService.RenderStepped:Connect(function()
                data.Box.Visible = false
             end
 
-            -- 2. ESP Name
+            -- 2. ESP Name (Ditempatkan Di Atas Box Secara Dinamis)
             if ESPSettings.Name then
                data.Name.Text = player.Name
-               data.Name.Position = Vector2.new(headScreen.X, headScreen.Y - 18)
+               data.Name.Position = Vector2.new(headScreen.X, headScreen.Y - 16)
                data.Name.Visible = true
             else
                data.Name.Visible = false
             end
 
-            -- 3. ESP Health
+            -- 3. ESP Health (Ditempatkan Di Samping Kiri Box Secara Dinamis)
             if ESPSettings.Health then
                local healthPercent = math.clamp(humanoid.Health / humanoid.MaxHealth, 0, 1)
                local barHeight = height * healthPercent
                
-               data.HealthBg.Size = Vector2.new(3, height + 2)
-               data.HealthBg.Position = Vector2.new(boxPos.X - 6, boxPos.Y - 1)
+               data.HealthBg.Size = Vector2.new(4, height)
+               data.HealthBg.Position = Vector2.new(boxPos.X - 6, boxPos.Y)
                data.HealthBg.Visible = true
 
-               data.HealthBar.Size = Vector2.new(1, barHeight)
-               data.HealthBar.Position = Vector2.new(boxPos.X - 5, boxPos.Y + (height - barHeight))
+               data.HealthBar.Size = Vector2.new(2, math.max(barHeight - 2, 1))
+               data.HealthBar.Position = Vector2.new(boxPos.X - 5, boxPos.Y + (height - barHeight) + 1)
                data.HealthBar.Color = Color3.fromRGB(255 - (healthPercent * 255), healthPercent * 255, 0)
                data.HealthBar.Visible = true
             else
